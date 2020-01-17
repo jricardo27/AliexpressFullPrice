@@ -20,6 +20,8 @@ var ITEM_LIST_PRICE_SELECTOR = "span.price-current";
 var QUANTITY_SELECTOR = ".product-number-picker input";
 var PRODUCT_SHIPPING_SELECTOR = ".product-shipping-price";
 var PRODUCT_PRICE_SELECTOR = ".product-price-value";
+var RIGHT_HEADER_SELECTOR = ".header-right-content";
+var MESSAGE_ELEMENT_ID = "aliexpressfullprice-message";
 var DATA_LOWER_PRICE = 'data-lower-price';
 var DATA_UPPER_PRICE = 'data-upper-price';
 
@@ -31,6 +33,22 @@ var obsConfig = {
 };
 var itemsAlreadySorted = false;
 
+
+function showMessage(message) {
+    var html = "<span id='" + MESSAGE_ELEMENT_ID + "' " +
+        "style='float: left; font-size: 14px; color: blueviolet'>" +
+        message +
+        "</span>";
+
+    var container = $(RIGHT_HEADER_SELECTOR);
+    container.find('#' + MESSAGE_ELEMENT_ID).remove();
+
+    container.append(html);
+}
+
+function clearMessage() {
+    $(RIGHT_HEADER_SELECTOR).find('#' + MESSAGE_ELEMENT_ID).remove();
+}
 
 function getCurrency() {
     var currency = "";
@@ -245,11 +263,11 @@ function execute(currency, refresh = false) {
             var items = container.find('.list-item');
 
             if (items.length === 60) {
-                console.log('Sorting items.');
                 itemsAlreadySorted = true;
                 sortItems(container, items, DATA_LOWER_PRICE);
+                showMessage('Items sorted.');
             } else {
-                console.log('Sorting skipped until all items are loaded.')
+                showMessage('Keep scrolling to load all products and sort them');
             }
         }
     }
