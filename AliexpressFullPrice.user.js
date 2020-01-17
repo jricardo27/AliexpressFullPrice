@@ -20,12 +20,16 @@ var ITEM_LIST_PRICE_SELECTOR = "span.price-current";
 var QUANTITY_SELECTOR = ".product-number-picker input";
 var PRODUCT_SHIPPING_SELECTOR = ".product-shipping-price";
 var PRODUCT_PRICE_SELECTOR = ".product-price-value";
+var DATA_LOWER_PRICE = 'data-lower-price';
+var DATA_UPPER_PRICE = 'data-upper-price';
+
 var obsConfig = {
     childList: true,
     characterData: true,
     attributes: true,
     subtree: true
 };
+var itemsAlreadySorted = false;
 
 
 function getCurrency() {
@@ -85,6 +89,7 @@ function getShipping(item, shipping_selector) {
 function addNewPrice(item, currency, prices, quantity, shipping, tax, price_selector, shipping_selector) {
     var priceTag = $(item.find(price_selector)[0]);
     var shippingTag = $(item.find(shipping_selector)[0]);
+    var newPrices = [];
 
     $.each([priceTag, shippingTag], function (index, tag) {
         tag.css("font-size", "8px");
@@ -112,6 +117,7 @@ function addNewPrice(item, currency, prices, quantity, shipping, tax, price_sele
     $.each(prices, function (index, price) {
         var singlePrice = "";
         var newPrice = ((price * quantity) + shipping) * tax;
+        newPrices.push(newPrice);
 
         if (quantity > 1) {
             singlePrice = newPrice / quantity;
@@ -129,6 +135,8 @@ function addNewPrice(item, currency, prices, quantity, shipping, tax, price_sele
 
     newContent += "</span>";
     priceTag.before(newContent);
+
+    return newPrices;
 }
 
 function taxForCurrency(currency) {
@@ -161,10 +169,37 @@ function processItems(currency, refresh = false) {
         var prices = getPrices(item, ITEM_LIST_PRICE_SELECTOR);
         var shipping = getShipping(item, ITEM_LIST_SHIPPING_SELECTOR);
 
-        addNewPrice(
+        var newPrices = addNewPrice(
             item, currency, prices, quantity, shipping, tax,
             ITEM_LIST_PRICE_SELECTOR, ITEM_LIST_SHIPPING_SELECTOR
         );
+
+        // Add prices as attributes.
+        var lowerPrice = newPrices[0];
+        var upperPrice = lowerPrice;
+
+        if (newPrices.length > 1) {
+            upperPrice = newPrices[1];
+        }
+
+        item.attr(DATA_LOWER_PRICE, lowerPrice);
+        item.attr(DATA_UPPER_PRICE, upperPrice);
+    });
+}
+
+function sortItems(container, items, attrName) {
+    var plainItems = items.toArray();
+
+    items.detach();
+
+    var sorted = plainItems.sort(function (a, b) {
+        var aVal = Number(a.getAttribute(attrName)),
+            bVal = Number(b.getAttribute(attrName));
+        return aVal - bVal;
+    });
+
+    sorted.forEach(function (element) {
+        container.append(element);
     });
 }
 
@@ -177,7 +212,6 @@ function getQuantity() {
 }
 
 function updateSingleProductPrice(currency) {
-    console.warn("Updating price");
     var productElement = $(".product-info");
     var tax = taxForCurrency(currency);
     var quantity = getQuantity();
@@ -204,8 +238,41 @@ function execute(currency, refresh = false) {
         updateSingleProductPrice(currency);
     } else {
         processItems(currency, refresh);
+
+        if (!itemsAlreadySorted) {
+            // Sort items using full price.
+            var container = $(LIST_SELECTOR);
+            var items = container.find('.list-item');
+
+            if (items.length === 60) {
+                console.log('Sorting items.');
+                itemsAlreadySorted = true;
+                sortItems(container, items, DATA_LOWER_PRICE);
+            } else {
+                console.log('Sorting skipped until all items are loaded.')
+            }
+        }
     }
 }
+
+function customObserver(target, config, callback) {
+    this.target = target || document;
+    this.config = config || {childList: true, subtree: true};
+    var that = this;
+
+    this.ob = new MutationObserver(function (mut, obsSelf) {
+        callback(that, mut, obsSelf);
+    });
+}
+
+customObserver.prototype = {
+    connect: function () {
+        this.ob.observe(this.target, this.config);
+    },
+    disconnect: function () {
+        this.ob.disconnect();
+    }
+};
 
 
 var currencyObserver = new MutationObserver(function (mutationRecords, self) {
@@ -217,9 +284,8 @@ var currencyObserver = new MutationObserver(function (mutationRecords, self) {
         return;
     }
 });
-var listItemsObserver = new MutationObserver(function (mutationRecords) {
-    execute(getCurrency(), false);
-});
+
+
 var productObserver = new MutationObserver(function (mutationRecords) {
     execute(getCurrency(), false);
 });
@@ -241,6 +307,14 @@ if ($(".product-main").length) {
     });
 } else {
     $(LIST_SELECTOR).each(function () {
-        listItemsObserver.observe(this, obsConfig);
+        var observer = new customObserver(this, obsConfig, function (obs, mutations) {
+            obs.disconnect();
+
+            execute(getCurrency(), false);
+
+            obs.connect();
+        });
+
+        observer.connect();
     });
 }
