@@ -16,6 +16,8 @@ var CURRENCY_SELECTOR = "span.currency";
 var LIST_SELECTOR = ".list-items";
 var ITEM_LIST_SHIPPING_SELECTOR = ".shipping-value";
 var ITEM_LIST_PRICE_SELECTOR = "span.price-current";
+var PAGINATION_SELECTOR = ".list-pagination";
+var CURRENT_PAGE_SELECTOR = ".next-current";
 
 var QUANTITY_SELECTOR = ".product-number-picker input";
 var PRODUCT_SHIPPING_SELECTOR = ".product-shipping-price";
@@ -32,6 +34,7 @@ var obsConfig = {
     subtree: true
 };
 var itemsAlreadySorted = false;
+var newItemsLoaded = false;
 
 
 function showMessage(message) {
@@ -207,17 +210,23 @@ function processItems(currency, refresh = false) {
 
 function sortItems(container, items, attrName) {
     var plainItems = items.toArray();
+    var cloned = [];
 
-    items.detach();
+    plainItems.forEach(function (element) {
+        cloned.push($(element).clone());
+    });
 
-    var sorted = plainItems.sort(function (a, b) {
-        var aVal = Number(a.getAttribute(attrName)),
-            bVal = Number(b.getAttribute(attrName));
+    cloned.sort(function (a, b) {
+        var aVal = Number(a.attr(attrName)),
+            bVal = Number(b.attr(attrName));
         return aVal - bVal;
     });
 
-    sorted.forEach(function (element) {
-        container.append(element);
+    cloned.forEach(function (element, index) {
+        var oldElement = $(plainItems[index]);
+
+        oldElement.empty();
+        oldElement.append(element.contents());
     });
 }
 
@@ -264,8 +273,17 @@ function execute(currency, refresh = false) {
 
             if (items.length === 60) {
                 itemsAlreadySorted = true;
-                sortItems(container, items, DATA_LOWER_PRICE);
-                showMessage('Items sorted.');
+                sortItems(container, items, DATA_UPPER_PRICE);
+
+                var message = "Items sorted.";
+
+                if (newItemsLoaded) {
+                    message = "Page " + initialPage + " was loaded.<br>" +
+                        "Items sorted.";
+                }
+
+                showMessage(message);
+                newItemsLoaded = false;
             } else {
                 showMessage('Keep scrolling to load all products and sort them');
             }
@@ -304,6 +322,9 @@ var currencyObserver = new MutationObserver(function (mutationRecords, self) {
 });
 
 
+var initialPage = "";
+
+
 var productObserver = new MutationObserver(function (mutationRecords) {
     execute(getCurrency(), false);
 });
@@ -328,7 +349,33 @@ if ($(".product-main").length) {
         var observer = new customObserver(this, obsConfig, function (obs, mutations) {
             obs.disconnect();
 
+            if (initialPage === "") {
+                initialPage = Number($(CURRENT_PAGE_SELECTOR).text());
+            }
+
             execute(getCurrency(), false);
+
+            obs.connect();
+        });
+
+        observer.connect();
+    });
+
+    $(PAGINATION_SELECTOR).each(function () {
+        var observer = new customObserver(this, obsConfig, function (obs, mutations) {
+            var currentPage = Number($(CURRENT_PAGE_SELECTOR).text());
+
+            if (initialPage === currentPage) {
+                return;
+            } else {
+                initialPage = currentPage;
+            }
+
+            obs.disconnect();
+
+            clearMessage();
+            itemsAlreadySorted = false;
+            newItemsLoaded = true;
 
             obs.connect();
         });
